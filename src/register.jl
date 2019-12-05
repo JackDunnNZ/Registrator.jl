@@ -221,7 +221,24 @@ function update_package_data(pkg::Pkg.Types.Project, registry_path, package_repo
     else
         compat_data = Dict()
     end
-    compat_data[pkg.version] = Dict{String,Any}(n=>Pkg.Types.semver_spec(v) for (n,v) in pkg.compat)
+
+    d = Dict{String,Any}()
+    for (n, v) in pkg.compat
+        spec = Pkg.Types.semver_spec(v)
+        function versionrange(lo::Pkg.Types.VersionBound,
+                              hi::Pkg.Types.VersionBound)
+            lo.t == hi.t && (lo = hi)
+            return Pkg.Types.VersionRange(lo, hi)
+        end
+        # the call to map(versionrange, ) can be removed
+        # once Pkg is updated to a version including
+        # https://github.com/JuliaLang/Pkg.jl/pull/1181
+        ranges = map(r->versionrange(r.lower, r.upper), spec.ranges)
+        ranges = Pkg.Types.VersionSpec(ranges).ranges # this combines joinable ranges
+        d[n] = length(ranges) == 1 ? string(ranges[1]) : map(string, ranges)
+    end
+    compat_data[pkg.version] = d
+
     Pkg.Compress.save(compat_file, compat_data)
 
     return
